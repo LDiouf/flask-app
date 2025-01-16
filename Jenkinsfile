@@ -1,25 +1,47 @@
 pipeline {
     agent any
+    environment {
+        DOCKER_IMAGE = 'lduiof/flask-app:latest'
+        DOCKER_HUB_CREDENTIALS = 'docker-hub-credentials-id' // Remplace par l'ID de tes credentials Jenkins
+        KUBE_CONFIG = '/path/to/kubeconfig' // Chemin vers ton fichier kubeconfig
+    }
     stages {
-        stage('Checkout') {
+        stage('Cloner le dépôt') {
             steps {
-                git url: 'https://github.com/LDiouf/flask-app.git', branch: 'main'
+                git 'https://github.com/LDiouf/flask-app.git'
             }
         }
-        stage('Build') {
+        
+        stage('Construire l\'image Docker') {
             steps {
-                sh 'echo "Building the application..."'
+                sh 'docker build -t $DOCKER_IMAGE .'
             }
         }
-        stage('Test') {
+
+        stage('Pousser l\'image sur DockerHub') {
             steps {
-                sh 'echo "Running tests..."'
+                withDockerRegistry([credentialsId: "$DOCKER_HUB_CREDENTIALS", url: 'https://index.docker.io/v1/']) {
+                    sh 'docker push $DOCKER_IMAGE'
+                }
             }
         }
-        stage('Deploy') {
+
+        stage('Déployer sur Kubernetes') {
             steps {
-                sh 'echo "Deploying the application..."'
+                sh '''
+                kubectl --kubeconfig=$KUBE_CONFIG apply -f kubernetes/deployment.yaml
+                kubectl --kubeconfig=$KUBE_CONFIG apply -f kubernetes/service.yaml
+                '''
             }
         }
     }
+    post {
+        success {
+            echo 'Pipeline terminé avec succès!'
+        }
+        failure {
+            echo 'Le pipeline a échoué.'
+        }
+    }
 }
+
